@@ -1,28 +1,32 @@
-document.getElementById('csvFile').addEventListener('change', function(event) {
-    const file = event.target.files[0];
-    const reader = new FileReader();
-
-    reader.onload = function(e) {
-        const text = e.target.result;
-        processCSV(text);
-    };
-
-    reader.readAsText(file);
-});
-
 const CAPACITY_PER_DEV = 15;
 
-function processCSV(data) {
-    const rows = data.split("\n").map(row => row.split(","));
+let allSprintData = [];
+
+document.getElementById('csvFile').addEventListener('change', function(event) {
+    const files = event.target.files;
+
+    for (let file of files) {
+        const reader = new FileReader();
+        reader.onload = function(e) {
+            processCSV(e.target.result, file.name);
+        };
+        reader.readAsText(file);
+    }
+});
+
+function processCSV(data, sprintName) {
+    const rows = data.split("\n").map(r => r.split(","));
     const headers = rows[0];
 
     const statusIndex = headers.indexOf("Status");
     const storyIndex = headers.indexOf("Custom field (Story Points)");
     const assigneeIndex = headers.indexOf("Assignee");
+    const createdIndex = headers.indexOf("Created");
 
     let totalPoints = 0;
-    let assigneeMap = {};
     let completedPoints = 0;
+    let assigneeMap = {};
+    let dailyBurn = {};
 
     for (let i = 1; i < rows.length; i++) {
         const row = rows[i];
@@ -31,62 +35,106 @@ function processCSV(data) {
         const status = row[statusIndex];
         const points = parseFloat(row[storyIndex]) || 0;
         const assignee = row[assigneeIndex] || "Unassigned";
+        const created = row[createdIndex];
 
         totalPoints += points;
 
         if (status && status.toLowerCase() === "done") {
             completedPoints += points;
+
+            const date = created ? created.split("T")[0] : "Unknown";
+            if (!dailyBurn[date]) dailyBurn[date] = 0;
+            dailyBurn[date] += points;
         }
 
         if (!assigneeMap[assignee]) assigneeMap[assignee] = 0;
         assigneeMap[assignee] += points;
     }
 
-    displaySummary(totalPoints, completedPoints, assigneeMap);
-    createUtilizationChart(assigneeMap);
+    const healthScore = calculateHealth(totalPoints, completedPoints, assigneeMap);
+
+    allSprintData.push({
+        sprintName,
+        totalPoints,
+        completedPoints,
+        assigneeMap,
+        dailyBurn,
+        healthScore
+    });
+
+    renderDashboard();
 }
 
-function displaySummary(totalPoints, completedPoints, assigneeMap) {
-    let html = "<h2>📊 Sprint Summary</h2>";
-    html += "<p>Total Story Points: " + totalPoints + "</p>";
-    html += "<p>Completed Story Points: " + completedPoints + "</p>";
+function calculateHealth(total, completed, assigneeMap) {
+    const completionRate = (completed / total) * 100;
 
-    html += "<h3>👥 Resource Utilization</h3>";
-    html += "<table border='1' cellpadding='8'>";
-    html += "<tr><th>Developer</th><th>Allocated</th><th>Capacity</th><th>Utilization %</th><th>Status</th></tr>";
-
+    let utilizationPenalty = 0;
     for (let dev in assigneeMap) {
-        const allocated = assigneeMap[dev];
-        const utilization = (allocated / CAPACITY_PER_DEV) * 100;
-
-        let status = "✅ Healthy";
-        if (utilization > 100) status = "🚨 Overallocated";
-        else if (utilization < 60) status = "⚠ Underutilized";
-
-        html += "<tr>";
-        html += "<td>" + dev + "</td>";
-        html += "<td>" + allocated + "</td>";
-        html += "<td>" + CAPACITY_PER_DEV + "</td>";
-        html += "<td>" + utilization.toFixed(1) + "%</td>";
-        html += "<td>" + status + "</td>";
-        html += "</tr>";
+        const utilization = (assigneeMap[dev] / CAPACITY_PER_DEV) * 100;
+        if (utilization > 120 || utilization < 50) {
+            utilizationPenalty += 10;
+        }
     }
 
-    html += "</table>";
+    let score = completionRate - utilizationPenalty;
+    return Math.max(0, Math.min(100, score)).toFixed(1);
+}
+
+function renderDashboard() {
+    let html = "<h2>📊 Sprint Summary</h2>";
+
+    allSprintData.forEach(sprint => {
+        html += `
+        <h3>${sprint.sprintName}</h3>
+        <p>Total Points: ${sprint.totalPoints}</p>
+        <p>Completed Points: ${sprint.completedPoints}</p>
+        <p>🏥 Health Score: <strong>${sprint.healthScore}/100</strong></p>
+        `;
+    });
 
     document.getElementById("summary").innerHTML = html;
+
+    renderBurndown();
+    renderUtilization();
 }
 
-function createUtilizationChart(assigneeMap) {
+function renderBurndown() {
+    const ctx = document.getElementById("burndownChart").getContext("2d");
+
+    const sprint = allSprintData[0];
+    if (!sprint) return;
+
+    const dates = Object.keys(sprint.dailyBurn).sort();
+    let remaining = sprint.totalPoints;
+    const remainingPoints = [];
+
+    dates.forEach(date => {
+        remaining -= sprint.dailyBurn[date];
+        remainingPoints.push(remaining);
+    });
+
+    new Chart(ctx, {
+        type: 'line',
+        data: {
+            labels: dates,
+            datasets: [{
+                label: "Remaining Points",
+                data: remainingPoints
+            }]
+        }
+    });
+}
+
+function renderUtilization() {
     const ctx = document.getElementById("assigneeChart").getContext("2d");
 
-    const labels = [];
-    const utilizationValues = [];
+    const sprint = allSprintData[0];
+    if (!sprint) return;
 
-    for (let dev in assigneeMap) {
-        labels.push(dev);
-        utilizationValues.push((assigneeMap[dev] / CAPACITY_PER_DEV) * 100);
-    }
+    const labels = Object.keys(sprint.assigneeMap);
+    const values = labels.map(dev => 
+        (sprint.assigneeMap[dev] / CAPACITY_PER_DEV) * 100
+    );
 
     new Chart(ctx, {
         type: 'bar',
@@ -94,16 +142,32 @@ function createUtilizationChart(assigneeMap) {
             labels: labels,
             datasets: [{
                 label: "Utilization %",
-                data: utilizationValues
+                data: values
             }]
         },
         options: {
             scales: {
-                y: {
-                    beginAtZero: true,
-                    max: 150
-                }
+                y: { beginAtZero: true, max: 150 }
             }
         }
     });
+}
+
+function exportPDF() {
+    const { jsPDF } = window.jspdf;
+    const doc = new jsPDF();
+
+    let y = 10;
+
+    doc.text("Sprint Leadership Report", 10, y);
+    y += 10;
+
+    allSprintData.forEach(sprint => {
+        doc.text(`Sprint: ${sprint.sprintName}`, 10, y); y+=8;
+        doc.text(`Total Points: ${sprint.totalPoints}`, 10, y); y+=8;
+        doc.text(`Completed Points: ${sprint.completedPoints}`, 10, y); y+=8;
+        doc.text(`Health Score: ${sprint.healthScore}/100`, 10, y); y+=12;
+    });
+
+    doc.save("Sprint_Report.pdf");
 }
