@@ -4,6 +4,12 @@ let allSprintData = [];
 let burndownChartInstance = null;
 let assigneeChartInstance = null;
 
+const workflowState = {
+    brdName: "",
+    brdText: "",
+    stories: []
+};
+
 // Keeps the parser local and dependency-free while handling quoted commas.
 function parseDelimitedLine(line, delimiter) {
     const values = [];
@@ -232,3 +238,137 @@ function exportPDF() {
 
     doc.save("Sprint_Report.pdf");
 }
+
+function updateWorkflowStatus(message) {
+    document.getElementById("workflowStatus").textContent = message;
+}
+
+function readBdrFile(file) {
+    return new Promise(resolve => {
+        const reader = new FileReader();
+        reader.onload = e => resolve(e.target.result || "");
+        reader.onerror = () => resolve("");
+        reader.readAsText(file);
+    });
+}
+
+function generateStoriesFromBrd(rawText) {
+    const lines = rawText
+        .split(/\r?\n/)
+        .map(line => line.trim())
+        .filter(line => line.length > 25);
+
+    const requirementCandidates = lines.filter(line => /shall|must|should|feature|requirement/i.test(line));
+    const seedLines = requirementCandidates.length > 0 ? requirementCandidates.slice(0, 8) : lines.slice(0, 5);
+
+    return seedLines.map((line, index) => ({
+        id: `US-${index + 1}`,
+        title: line.length > 90 ? `${line.slice(0, 87)}...` : line,
+        lane: "po",
+        acceptanceCriteria: [
+            "Given the relevant BRD context",
+            "When the workflow step is executed",
+            "Then the expected business outcome is demonstrably met"
+        ]
+    }));
+}
+
+function renderStoryList() {
+    const root = document.getElementById("storyList");
+    if (workflowState.stories.length === 0) {
+        root.innerHTML = "<p>No stories generated yet.</p>";
+        return;
+    }
+
+    root.innerHTML = workflowState.stories
+        .map(story => `
+            <article class="story-card">
+                <h4>${story.id}: ${story.title}</h4>
+                <ul>
+                    ${story.acceptanceCriteria.map(item => `<li>${item}</li>`).join("")}
+                </ul>
+            </article>
+        `)
+        .join("");
+}
+
+function renderWorkflowBoard() {
+    const laneIds = {
+        po: "poLane",
+        coding: "codingLane",
+        review: "reviewLane",
+        qa: "qaLane",
+        done: "doneLane"
+    };
+
+    Object.values(laneIds).forEach(id => {
+        document.getElementById(id).innerHTML = "";
+    });
+
+    workflowState.stories.forEach(story => {
+        const targetLane = laneIds[story.lane] || laneIds.po;
+        const li = document.createElement("li");
+        li.textContent = `${story.id} — ${story.title}`;
+        document.getElementById(targetLane).appendChild(li);
+    });
+}
+
+function runAgent(agent) {
+    const order = ["po", "coding", "review", "qa", "done"];
+    const index = order.indexOf(agent);
+
+    if (workflowState.stories.length === 0) {
+        updateWorkflowStatus("Upload BRD first so PO agent can generate stories.");
+        return;
+    }
+
+    let moved = 0;
+    workflowState.stories.forEach(story => {
+        if (order.indexOf(story.lane) === index) {
+            story.lane = order[index + 1] || "done";
+            moved += 1;
+        }
+    });
+
+    renderWorkflowBoard();
+
+    if (moved === 0) {
+        updateWorkflowStatus(`No stories in ${agent.toUpperCase()} lane to process.`);
+    } else {
+        updateWorkflowStatus(`${agent.toUpperCase()} agent processed ${moved} story(ies).`);
+    }
+}
+
+document.getElementById("brdFile").addEventListener("change", async event => {
+    const file = event.target.files[0];
+    if (!file) return;
+
+    const text = await readBdrFile(file);
+    workflowState.brdName = file.name;
+    workflowState.brdText = text;
+    workflowState.stories = generateStoriesFromBrd(text || file.name);
+
+    renderStoryList();
+    renderWorkflowBoard();
+    updateWorkflowStatus(`BRD loaded: ${file.name}. PO agent stories generated.`);
+});
+
+document.getElementById("runPoAgent").addEventListener("click", () => {
+    if (!workflowState.brdName) {
+        updateWorkflowStatus("Upload BRD first before PO agent run.");
+        return;
+    }
+
+    workflowState.stories.forEach(story => {
+        if (story.lane === "po") {
+            story.lane = "coding";
+        }
+    });
+
+    renderWorkflowBoard();
+    updateWorkflowStatus("PO agent finalized stories and pushed them to Coding lane.");
+});
+
+document.getElementById("runCodingAgent").addEventListener("click", () => runAgent("coding"));
+document.getElementById("runReviewAgent").addEventListener("click", () => runAgent("review"));
+document.getElementById("runQaAgent").addEventListener("click", () => runAgent("qa"));
