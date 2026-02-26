@@ -6,19 +6,22 @@
 </head>
 <body>
 
-<h1>📊 Sprint Dashboard</h1>
+<h1>📊 Sprint Analytics Dashboard</h1>
 
-<input type="file" id="csvFile" accept=".csv" />
+<input type="file" id="csvFile" accept=".csv" multiple />
 
 <div id="summary"></div>
 
-<h2>Status Distribution</h2>
-<canvas id="statusChart"></canvas>
+<h2>📉 Burn-down Chart</h2>
+<canvas id="burndownChart"></canvas>
 
-<h2>Resource Utilization</h2>
+<h2>👥 Resource Utilization</h2>
 <canvas id="assigneeChart"></canvas>
 
+<button onclick="exportPDF()">📄 Export Leadership Report</button>
+
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <script src="script.js"></script>
 
 </body>
