@@ -1,9 +1,57 @@
 const CAPACITY_PER_DEV = 15;
 
 let allSprintData = [];
+let burndownChartInstance = null;
+let assigneeChartInstance = null;
+
+// Keeps the parser local and dependency-free while handling quoted commas.
+function parseDelimitedLine(line, delimiter) {
+    const values = [];
+    let current = "";
+    let inQuotes = false;
+
+    for (let i = 0; i < line.length; i++) {
+        const ch = line[i];
+
+        if (ch === '"') {
+            if (inQuotes && line[i + 1] === '"') {
+                current += '"';
+                i++;
+            } else {
+                inQuotes = !inQuotes;
+            }
+            continue;
+        }
+
+        if (ch === delimiter && !inQuotes) {
+            values.push(current.trim());
+            current = "";
+            continue;
+        }
+
+        current += ch;
+    }
+
+    values.push(current.trim());
+    return values;
+}
+
+function parseCSV(data) {
+    const lines = data
+        .split(/\r?\n/)
+        .map(line => line.trim())
+        .filter(Boolean);
+
+    const header = lines[0] || "";
+    const delimiter = header.includes("\t") ? "\t" : ",";
+
+    return lines.map(line => parseDelimitedLine(line, delimiter));
+}
 
 document.getElementById('csvFile').addEventListener('change', function(event) {
     const files = event.target.files;
+
+    allSprintData = [];
 
     for (let file of files) {
         const reader = new FileReader();
@@ -15,13 +63,18 @@ document.getElementById('csvFile').addEventListener('change', function(event) {
 });
 
 function processCSV(data, sprintName) {
-    const rows = data.split("\n").map(r => r.split(","));
-    const headers = rows[0];
+    const rows = parseCSV(data);
+    const headers = rows[0] || [];
 
     const statusIndex = headers.indexOf("Status");
     const storyIndex = headers.indexOf("Custom field (Story Points)");
     const assigneeIndex = headers.indexOf("Assignee");
     const createdIndex = headers.indexOf("Created");
+
+    if (statusIndex === -1 || storyIndex === -1 || assigneeIndex === -1 || createdIndex === -1) {
+        console.warn(`Skipping ${sprintName}: missing one or more required columns.`);
+        return;
+    }
 
     let totalPoints = 0;
     let completedPoints = 0;
@@ -42,7 +95,7 @@ function processCSV(data, sprintName) {
         if (status && status.toLowerCase() === "done") {
             completedPoints += points;
 
-            const date = created ? created.split("T")[0] : "Unknown";
+            const date = created ? created.split(" ")[0] : "Unknown";
             if (!dailyBurn[date]) dailyBurn[date] = 0;
             dailyBurn[date] += points;
         }
@@ -66,7 +119,7 @@ function processCSV(data, sprintName) {
 }
 
 function calculateHealth(total, completed, assigneeMap) {
-    const completionRate = (completed / total) * 100;
+    const completionRate = total > 0 ? (completed / total) * 100 : 0;
 
     let utilizationPenalty = 0;
     for (let dev in assigneeMap) {
@@ -113,7 +166,11 @@ function renderBurndown() {
         remainingPoints.push(remaining);
     });
 
-    new Chart(ctx, {
+    if (burndownChartInstance) {
+        burndownChartInstance.destroy();
+    }
+
+    burndownChartInstance = new Chart(ctx, {
         type: 'line',
         data: {
             labels: dates,
@@ -132,11 +189,15 @@ function renderUtilization() {
     if (!sprint) return;
 
     const labels = Object.keys(sprint.assigneeMap);
-    const values = labels.map(dev => 
+    const values = labels.map(dev =>
         (sprint.assigneeMap[dev] / CAPACITY_PER_DEV) * 100
     );
 
-    new Chart(ctx, {
+    if (assigneeChartInstance) {
+        assigneeChartInstance.destroy();
+    }
+
+    assigneeChartInstance = new Chart(ctx, {
         type: 'bar',
         data: {
             labels: labels,
@@ -163,10 +224,10 @@ function exportPDF() {
     y += 10;
 
     allSprintData.forEach(sprint => {
-        doc.text(`Sprint: ${sprint.sprintName}`, 10, y); y+=8;
-        doc.text(`Total Points: ${sprint.totalPoints}`, 10, y); y+=8;
-        doc.text(`Completed Points: ${sprint.completedPoints}`, 10, y); y+=8;
-        doc.text(`Health Score: ${sprint.healthScore}/100`, 10, y); y+=12;
+        doc.text(`Sprint: ${sprint.sprintName}`, 10, y); y += 8;
+        doc.text(`Total Points: ${sprint.totalPoints}`, 10, y); y += 8;
+        doc.text(`Completed Points: ${sprint.completedPoints}`, 10, y); y += 8;
+        doc.text(`Health Score: ${sprint.healthScore}/100`, 10, y); y += 12;
     });
 
     doc.save("Sprint_Report.pdf");
