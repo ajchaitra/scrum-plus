@@ -7,3 +7,79 @@ canvas {
     max-width: 800px;
     margin-bottom: 50px;
 }
+
+.workflow-section {
+    margin-top: 48px;
+    padding: 20px;
+    border: 1px solid #d7dbe0;
+    border-radius: 10px;
+    background: #f8fafc;
+}
+
+.workflow-intro {
+    color: #3e4b5a;
+}
+
+.workflow-controls {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin: 14px 0;
+}
+
+.workflow-controls button {
+    background: #1967d2;
+    color: white;
+    border: none;
+    padding: 8px 12px;
+    border-radius: 6px;
+    cursor: pointer;
+}
+
+.status-pill {
+    display: inline-block;
+    padding: 8px 12px;
+    border-radius: 20px;
+    background: #e9eef6;
+    margin-bottom: 14px;
+}
+
+.story-list {
+    display: grid;
+    gap: 10px;
+    margin-bottom: 20px;
+}
+
+.story-card {
+    background: white;
+    border: 1px solid #d7dbe0;
+    border-radius: 8px;
+    padding: 12px;
+}
+
+.workflow-board {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 12px;
+    margin-bottom: 14px;
+}
+
+.lane {
+    background: white;
+    border: 1px solid #d7dbe0;
+    border-radius: 8px;
+    padding: 10px;
+    min-height: 140px;
+}
+
+.lane ul {
+    margin: 0;
+    padding-left: 16px;
+}
+
+#evidenceNotes {
+    width: 100%;
+    border-radius: 8px;
+    border: 1px solid #d7dbe0;
+    padding: 8px;
+}

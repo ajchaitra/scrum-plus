@@ -20,6 +20,55 @@
 
 <button onclick="exportPDF()">📄 Export Leadership Report</button>
 
+<hr>
+
+<section class="workflow-section">
+    <h2>🤖 BRD to Delivery Workflow Dashboard</h2>
+    <p class="workflow-intro">
+        Upload a BRD and orchestrate the handoff flow across PO, Coding, Code Review, and QA agents.
+    </p>
+
+    <div class="workflow-controls">
+        <input type="file" id="brdFile" accept=".txt,.md,.csv,.json,.doc,.docx,.pdf" />
+        <button id="runPoAgent">Run PO Agent</button>
+        <button id="runCodingAgent">Run Coding Agent</button>
+        <button id="runReviewAgent">Run Code Reviewer Agent</button>
+        <button id="runQaAgent">Run QA Agent</button>
+    </div>
+
+    <div id="workflowStatus" class="status-pill">No BRD uploaded.</div>
+
+    <h3>Generated User Stories</h3>
+    <div id="storyList" class="story-list"></div>
+
+    <h3>Agent Workflow Board</h3>
+    <div class="workflow-board">
+        <div class="lane">
+            <h4>📘 PO Agent</h4>
+            <ul id="poLane"></ul>
+        </div>
+        <div class="lane">
+            <h4>💻 Coding Agent</h4>
+            <ul id="codingLane"></ul>
+        </div>
+        <div class="lane">
+            <h4>🔍 Code Reviewer Agent</h4>
+            <ul id="reviewLane"></ul>
+        </div>
+        <div class="lane">
+            <h4>🧪 QA Agent</h4>
+            <ul id="qaLane"></ul>
+        </div>
+        <div class="lane">
+            <h4>✅ Done + Evidence</h4>
+            <ul id="doneLane"></ul>
+        </div>
+    </div>
+
+    <h3>Completion Evidence</h3>
+    <textarea id="evidenceNotes" rows="4" placeholder="Add links to Jira ticket, PR, test report, screenshots, and sign-off details..."></textarea>
+</section>
+
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <script src="script.js"></script>
