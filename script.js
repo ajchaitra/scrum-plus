@@ -10,6 +10,8 @@ document.getElementById('csvFile').addEventListener('change', function(event) {
     reader.readAsText(file);
 });
 
+const CAPACITY_PER_DEV = 15;
+
 function processCSV(data) {
     const rows = data.split("\n").map(row => row.split(","));
     const headers = rows[0];
@@ -19,11 +21,12 @@ function processCSV(data) {
     const assigneeIndex = headers.indexOf("Assignee");
 
     let totalPoints = 0;
-    let statusMap = {};
     let assigneeMap = {};
+    let completedPoints = 0;
 
     for (let i = 1; i < rows.length; i++) {
         const row = rows[i];
+        if (!row[assigneeIndex]) continue;
 
         const status = row[statusIndex];
         const points = parseFloat(row[storyIndex]) || 0;
@@ -31,34 +34,76 @@ function processCSV(data) {
 
         totalPoints += points;
 
-        // Status
-        if (!statusMap[status]) statusMap[status] = 0;
-        statusMap[status] += points;
+        if (status && status.toLowerCase() === "done") {
+            completedPoints += points;
+        }
 
-        // Assignee
         if (!assigneeMap[assignee]) assigneeMap[assignee] = 0;
         assigneeMap[assignee] += points;
     }
 
-    document.getElementById("summary").innerHTML = 
-        "<h2>Summary</h2>" +
-        "<p>Total Story Points: " + totalPoints + "</p>";
-
-    createChart("statusChart", statusMap);
-    createChart("assigneeChart", assigneeMap);
+    displaySummary(totalPoints, completedPoints, assigneeMap);
+    createUtilizationChart(assigneeMap);
 }
 
-function createChart(canvasId, dataMap) {
-    const ctx = document.getElementById(canvasId).getContext("2d");
+function displaySummary(totalPoints, completedPoints, assigneeMap) {
+    let html = "<h2>📊 Sprint Summary</h2>";
+    html += "<p>Total Story Points: " + totalPoints + "</p>";
+    html += "<p>Completed Story Points: " + completedPoints + "</p>";
+
+    html += "<h3>👥 Resource Utilization</h3>";
+    html += "<table border='1' cellpadding='8'>";
+    html += "<tr><th>Developer</th><th>Allocated</th><th>Capacity</th><th>Utilization %</th><th>Status</th></tr>";
+
+    for (let dev in assigneeMap) {
+        const allocated = assigneeMap[dev];
+        const utilization = (allocated / CAPACITY_PER_DEV) * 100;
+
+        let status = "✅ Healthy";
+        if (utilization > 100) status = "🚨 Overallocated";
+        else if (utilization < 60) status = "⚠ Underutilized";
+
+        html += "<tr>";
+        html += "<td>" + dev + "</td>";
+        html += "<td>" + allocated + "</td>";
+        html += "<td>" + CAPACITY_PER_DEV + "</td>";
+        html += "<td>" + utilization.toFixed(1) + "%</td>";
+        html += "<td>" + status + "</td>";
+        html += "</tr>";
+    }
+
+    html += "</table>";
+
+    document.getElementById("summary").innerHTML = html;
+}
+
+function createUtilizationChart(assigneeMap) {
+    const ctx = document.getElementById("assigneeChart").getContext("2d");
+
+    const labels = [];
+    const utilizationValues = [];
+
+    for (let dev in assigneeMap) {
+        labels.push(dev);
+        utilizationValues.push((assigneeMap[dev] / CAPACITY_PER_DEV) * 100);
+    }
 
     new Chart(ctx, {
         type: 'bar',
         data: {
-            labels: Object.keys(dataMap),
+            labels: labels,
             datasets: [{
-                label: "Story Points",
-                data: Object.values(dataMap)
+                label: "Utilization %",
+                data: utilizationValues
             }]
+        },
+        options: {
+            scales: {
+                y: {
+                    beginAtZero: true,
+                    max: 150
+                }
+            }
         }
     });
 }
